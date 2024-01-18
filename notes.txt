@@ -1,0 +1,4 @@
+Each instruction is 2 bytes long
+Instruction begins at address 0x200
+(0x000-0x1FF is historically reserved for the interpreter itself)
+
