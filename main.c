@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 //#include "raylib.h"
 
 /*
@@ -16,10 +17,11 @@ by Preston Corless
 #define STACKMEM 1024 // 4 bytes per value, for a stack of 256
 
 unsigned char prg[PRGMEM] = {0}; // 4KB of Program Memory
-int head = 0; // Address Register
+int head = 0x200; // Address Register
 
 unsigned char V[16] = {0}; // V0-VF
 
+unsigned char ram[WORKMEM] = {0};
 short I; // Memory Pointer - Only uses 12 bits
 
 unsigned short stack[256] = {0}; // 16-bit values; also only uses 12 of those bits
@@ -32,18 +34,46 @@ void printHelp(char* arg) {
 }
 
 int loadCode(FILE* f, char* dest) {
+	
+	fseek(f, 0, SEEK_END);
+	int size = ftell(f); 
+	fseek(f, 0, SEEK_SET);
+
   char ch;
-  int head = 0;
+  int rhead = 0;
   do {				// transfer file data to the prg array (copy all characters in debug mode, else copy only command characters)
     ch = fgetc(f);
-    head++;
-    dest[head] = ch;
-    if (head >= PRGMEM) {
+    dest[rhead + 0x200] = ch;
+    rhead++;
+    if (rhead > PRGMEM) {
       fprintf(stderr, "\nERROR: Out of Program Memory. Program file too large.\nSee \"Notes\" in brainfetch.c.\n");
       return -1;
     }
-  } while (ch != EOF);
-  return head;		// return size (index of the last write) of file buffer
+  } while (rhead <= size);
+  return size;
+}
+
+void initChip8() {
+
+  unsigned char chip8_fontset[80] = {
+      0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+      0x20, 0x60, 0x20, 0x20, 0x70, // 1
+      0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+      0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+      0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+      0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+      0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+      0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+      0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+      0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+      0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+      0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+      0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+      0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+      0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+      0xF0, 0x80, 0xF0, 0x80, 0x80  // F
+  };
+  memcpy(ram, chip8_fontset, 80 * sizeof(char));
 }
 
 int main(int argc, char** argv) {
@@ -52,7 +82,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  FILE* f = fopen(argv[1], "r");	// open the file specified as an argument into the program
+  FILE* f = fopen("PONG.ch8", "r");	// open the file specified as an argument into the program
 
   if (!f) {					// end program if file not found
     fprintf(stderr,"%s: no such file\n\n", argv[1]);
@@ -60,38 +90,43 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  int fileSize = loadCode(f, prg); // fileSize is actually the index of the last byte, or the file's size minus one.
+  int fileSize = loadCode(f, prg);
 
   if (fileSize < 0) {
     return 1;
   }
 
+  initChip8();
+
   //InitWindow(64 * SCREEN_SCALE, 32 * SCREEN_SCALE, "Kronch");
   //SetTargetFPS(60);
-  while (head < fileSize /*&& !WindowShouldClose()*/) {
+  while (head < PRGMEM /*&& !WindowShouldClose()*/) {
     unsigned char op1 = prg[head];
     unsigned char op2 = prg[head+1];
-    unsigned short opcode = (op1 << 8) & op2;
+    unsigned short opcode = (op1 << 8) | op2;
     char X = op1 & 0x0f;
     char Y = op2 >> 4;
     head += 2;
     switch (op1 >> 4) {
       case 0x0: // Various instructions
-        if (op2 == 0xEE) { // Return from subroutine (use stack)
+        if (op2 == 0x0E) { // clear screen
+          
+        }
+        else if (op2 == 0xEE) { // Return from subroutine (use stack)
           stackptr--;
           head = stack[stackptr];
         }
         break;
       case 0x1: // Goto (exclude stack)
-        head = opcode & 0xfff;
+        head = opcode & 0x0fff;
         break;
-      case 0x2: // Subroutine (goto with stack I think)
-        stackptr++;
+      case 0x2: // Subroutine (goto with stack)
         stack[stackptr] = head;
+        stackptr++;
         head = opcode & 0x0fff;
         break;
       case 0x3: // Equality conditional
-        if (V[op1 & 0x0f] == op2) {
+        if (V[X] == op2) {
           head += 2;
         }
         break;
@@ -106,10 +141,10 @@ int main(int argc, char** argv) {
         }
         break;
       case 0x6: // Set register
-        V[op1 & 0x0f] = op2;
+        V[X] = op2;
         break;
       case 0x7: // Add to register (no carry flag)
-        V[op1 & 0x0f] += op2;
+        V[X] += op2;
         break;
       case 0x8: // Register Math
         switch (op2 & 0x0f) {
@@ -125,11 +160,16 @@ int main(int argc, char** argv) {
           case 0x3: // XOR Operation
             V[X] ^= V[Y];
             break;
-          case 0x4: // Add Operation
-            if ((int)(V[X] + V[Y]) > 0xff) {
+          case 0x4:{ // Add Operation
+            int i = (int)V[X] + (int)V[Y];
+            //V[0xF] = (i > 0xFF);
+            if (i > 0xff) {
               V[0xF] = 1;
+            } else {
+              V[0xF] = 0;
             }
-            V[X] += V[Y];
+            V[X] = i & 0xFF;
+          }
             break;
           case 0x5: // Subtract Operation
             V[0xF] = V[X] >= V[Y];
@@ -144,7 +184,7 @@ int main(int argc, char** argv) {
             V[X] = V[Y] - V[X];
             break;
           case 0xE: // Left Bit Shift Operation
-            V[0xF] = (V[X] & 0x80) >> 8;
+            V[0xF] = (V[X] & 0x80) >> 7;
             V[X] >>= 1;
             break;
         }
