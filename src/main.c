@@ -13,17 +13,13 @@ by Preston Corless
 
 #define SCREEN_SCALE 10
 #define MEMORY 4096 // 4KB
-#define STACKMEM 1024 // 4 bytes per value, for a stack of 256
-#define CLOCK_SPEED 1200 // Hertz
+#define CLOCK_SPEED 900 // Hertz
 #define REFRESH_RATE 60 // Hertz
 #define CYCLES_PER_FRAME (CLOCK_SPEED/REFRESH_RATE)
 #define FF_SPEED 10
 
 Color off = {0x03, 0x0f, 0x03, 0xff};
 Color on = {0xaa, 0xee, 0xaa, 0xff};
-
-//Color off = {0xbb, 0xcc, 0xaa, 0xff};
-//Color on = {0x33, 0x44, 0x22, 0xff};
 
 unsigned char mem[MEMORY] = {0}; // 4KB of Program Memory
 int pc = 0x200; // Program Counter
@@ -46,7 +42,7 @@ bool emulPaused = false;
 bool pauseButtonState = false;
 
 void printHelp(char* arg) {
-  printf("Usage:\n  %s [FILE].ch8 [OPTIONS]\n", arg);
+  printf("Usage:\n  %s [ROM].ch8\n\n", arg);
 }
 
 int loadCode(FILE* f, unsigned char* dest) {
@@ -372,13 +368,13 @@ int main(int argc, char** argv) {
               for (char i = 0; i <= X; i++) {
                 mem[I+i] = V[i];
               }
-              I = (I+1) & 0xFFFF; // what?
+              I = (I+1) & 0xFFFF;
               break;
             case 0x65:
               for (char i = 0; i <= X; i++) {
                 V[i] = mem[I+i];
               }
-              I = (I+1) & 0xFFFF; // what?
+              I = (I+1) & 0xFFFF;
               break;
           }
           break;
@@ -393,3 +389,4 @@ int main(int argc, char** argv) {
 
   return 0;
 }
+

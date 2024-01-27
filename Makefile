@@ -3,6 +3,7 @@
 
 all:
 	gcc src/main.c -o kronch -lraylib -lGL -lm -lpthread -ldl -lrt
+	chmod +x kronch
 
 clean:
 	rm kronch
