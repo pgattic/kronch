@@ -39,8 +39,8 @@ unsigned char soundTimer = 0;
 
 unsigned char keyboard[16];
 bool fastForward = false;
-
-bool drawFlag = true;
+bool emulPaused = false;
+bool pauseButtonState = false;
 
 void printHelp(char* arg) {
   printf("Usage:\n  %s [FILE].ch8 [OPTIONS]\n", arg);
@@ -113,23 +113,35 @@ void readKeys() {
   keyboard[0xE] = IsKeyDown(KEY_F);
   keyboard[0xF] = IsKeyDown(KEY_V);
   fastForward = IsKeyDown(KEY_TAB);
+  if (IsKeyDown(KEY_SPACE) && !pauseButtonState) {
+    emulPaused = !emulPaused;
+    pauseButtonState = true;
+  } else if (!IsKeyDown(KEY_SPACE) && pauseButtonState) {
+    pauseButtonState = false;
+  }
 }
 
 void drawScreen() {
+  if (delayTimer) {
+    delayTimer--;
+  }
+
   BeginDrawing();
 
-  if (drawFlag) {
-    for (int i = 0; i < 32; i++) {
-      for (int j = 0; j < 64; j++) {
-        Color targetColor = screen[i][j] ? black : white;
-        DrawRectangle(j * SCREEN_SCALE, i * SCREEN_SCALE, SCREEN_SCALE, SCREEN_SCALE, targetColor);
+  ClearBackground(white);
+
+  for (int i = 0; i < 32; i++) {
+    for (int j = 0; j < 64; j++) {
+      if (screen[i][j]) {
+        DrawRectangle(j * SCREEN_SCALE, i * SCREEN_SCALE, SCREEN_SCALE, SCREEN_SCALE, black);
       }
     }
   }
-  drawFlag = false;
 
-  if (delayTimer) {
-    delayTimer--;
+  if (emulPaused) {
+    Color haze = {0xff, 0xff, 0xff, 0x33};
+    DrawRectangle(0, 0, 64 * SCREEN_SCALE, 32 * SCREEN_SCALE, haze);
+    DrawText("PAUSED", 4, 0, 40, BLACK);
   }
 
   EndDrawing();
@@ -162,7 +174,7 @@ int main(int argc, char** argv) {
   SetTargetFPS(REFRESH_RATE);
   while (pc < MEMORY && !WindowShouldClose()) {
     readKeys();
-    for (int cycles = 0; cycles < (CYCLES_PER_FRAME * (fastForward ? FF_SPEED : 1)) && pc < MEMORY; cycles++) {
+    for (int cycles = 0; cycles < (CYCLES_PER_FRAME * (fastForward ? FF_SPEED : 1)) && pc < MEMORY && !emulPaused; cycles++) {
       unsigned char op1 = mem[pc];
       unsigned char op2 = mem[pc+1];
       unsigned short opcode = (op1 << 8) | op2;
@@ -177,7 +189,6 @@ int main(int argc, char** argv) {
                 screen[i][j] = false;
               }
             }
-            drawFlag = true;
           } else if (op2 == 0xEE) { // Return from subroutine (use stack)
             stackptr--;
             pc = stack[stackptr];
@@ -297,7 +308,6 @@ int main(int argc, char** argv) {
             coordY++;
             if (coordY > 31) { break; }
           }
-          drawFlag = true;
           break;
         case 0xE:
           if (op2 == 0x9E) {
