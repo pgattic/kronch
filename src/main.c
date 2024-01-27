@@ -11,16 +11,19 @@ by Preston Corless
 #include <string.h>
 #include "raylib.h"
 
-#define SCREEN_SCALE 20
+#define SCREEN_SCALE 10
 #define MEMORY 4096 // 4KB
 #define STACKMEM 1024 // 4 bytes per value, for a stack of 256
-#define CLOCK_SPEED 800 // Hertz
+#define CLOCK_SPEED 1200 // Hertz
 #define REFRESH_RATE 60 // Hertz
 #define CYCLES_PER_FRAME (CLOCK_SPEED/REFRESH_RATE)
 #define FF_SPEED 10
 
-Color white = {0xbb, 0xcc, 0xaa, 0xff};
-Color black = {0x33, 0x44, 0x22, 0xff};
+Color off = {0x03, 0x0f, 0x03, 0xff};
+Color on = {0xaa, 0xee, 0xaa, 0xff};
+
+//Color off = {0xbb, 0xcc, 0xaa, 0xff};
+//Color on = {0x33, 0x44, 0x22, 0xff};
 
 unsigned char mem[MEMORY] = {0}; // 4KB of Program Memory
 int pc = 0x200; // Program Counter
@@ -29,7 +32,7 @@ unsigned char V[16] = {0}; // V0-VF
 
 unsigned short I; // Memory Pointer - Only uses 12 bits
 
-unsigned short stack[256] = {0}; // 16-bit values; also only uses 12 of those bits
+unsigned short stack[12] = {0}; // 16-bit values; also only uses 12 of those bits
 unsigned short stackptr; // Index of current stack frame
 
 bool screen[32][64] = {false}; // 2-D array of bools
@@ -46,7 +49,7 @@ void printHelp(char* arg) {
   printf("Usage:\n  %s [FILE].ch8 [OPTIONS]\n", arg);
 }
 
-int loadCode(FILE* f, char* dest) {
+int loadCode(FILE* f, unsigned char* dest) {
 
   fseek(f, 0, SEEK_END);
   int size = ftell(f); 
@@ -89,7 +92,7 @@ void initChip8() {
   memset(mem, 0, 4096);
   memcpy(&mem[0x50], chip8_fontset, 80 * sizeof(char));
   memcpy(mem, chip8_fontset, 80 * sizeof(char));
-  memset(stack, 0, 256);
+  memset(stack, 0, 12);
   memset(V, 0, 16);
   memset(screen, 0, 2048);
   memset(keyboard, 0, 16);
@@ -126,14 +129,18 @@ void drawScreen() {
     delayTimer--;
   }
 
+  if (soundTimer) {
+    soundTimer--;
+  }
+
   BeginDrawing();
 
-  ClearBackground(white);
+  ClearBackground(off);
 
   for (int i = 0; i < 32; i++) {
     for (int j = 0; j < 64; j++) {
       if (screen[i][j]) {
-        DrawRectangle(j * SCREEN_SCALE, i * SCREEN_SCALE, SCREEN_SCALE, SCREEN_SCALE, black);
+        DrawRectangle(j * SCREEN_SCALE, i * SCREEN_SCALE, SCREEN_SCALE, SCREEN_SCALE, on);
       }
     }
   }
@@ -145,6 +152,11 @@ void drawScreen() {
   }
 
   EndDrawing();
+}
+
+void writeCarry(unsigned char dest, unsigned char value, bool flag) {
+  V[dest] = (value & 0xFF);
+  V[0xF] = flag ? 1 : 0;
 }
 
 int main(int argc, char** argv) {
@@ -191,7 +203,7 @@ int main(int argc, char** argv) {
             }
           } else if (op2 == 0xEE) { // Return from subroutine (use stack)
             stackptr--;
-            pc = stack[stackptr];
+            pc = stack[stackptr % 12];
           } else {
             printf("Opcode Error 0XXX, address %x\n", pc-2);
           }
@@ -200,7 +212,7 @@ int main(int argc, char** argv) {
           pc = opcode & 0x0fff;
           break;
         case 0x2: // Subroutine (goto with stack)
-          stack[stackptr] = pc;
+          stack[stackptr % 12] = pc;
           stackptr++;
           pc = opcode & 0x0fff;
           break;
@@ -232,40 +244,41 @@ int main(int argc, char** argv) {
               break;
             case 0x1: // OR Operation
               V[X] |= V[Y];
+              V[0xF] = 0;
               break;
             case 0x2: // AND Operation
               V[X] &= V[Y];
+              V[0xF] = 0;
               break;
             case 0x3: // XOR Operation
               V[X] ^= V[Y];
+              V[0xF] = 0;
               break;
             case 0x4:{ // Add Operation
-              int i = (int)V[X] + (int)V[Y];
-              //V[0xF] = (i > 0xFF);
-              if (i > 0xff) {
-                V[0xF] = 1;
-              } else {
-                V[0xF] = 0;
-              }
-              V[X] = i & 0xFF;
+              int t = V[X] + V[Y];
+              writeCarry(X, t, (t > 0xFF));
               break;
             }
-            case 0x5: // Subtract Operation
-              V[0xF] = V[X] >= V[Y];
-              V[X] -= V[Y];
+            case 0x5:{ // Subtract Operation
+              int t = V[X] - V[Y];
+              writeCarry(X, t, (V[X] >= V[Y]));
               break;
-            case 0x6: // Right Bit Shift Operation
-              V[0xF] = V[X] & 0x1;
-              V[X] >>= 1;
+            }
+            case 0x6:{ // Right Bit Shift Operation
+              int t = V[Y] >> 1;
+              writeCarry(X, t, V[Y] & 0x1);
               break;
-            case 0x7: // Subtract Operation
-              V[0xF] = V[Y] >= V[X];
-              V[X] = V[Y] - V[X];
+            }
+            case 0x7:{ // Subtract Operation
+              int t = V[Y] - V[X];
+              writeCarry(X, t, (V[Y] >= V[X]));
               break;
-            case 0xE: // Left Bit Shift Operation
-              V[0xF] = (V[X] & 0x80) >> 7;
-              V[X] <<= 1;
+            }
+            case 0xE:{ // Left Bit Shift Operation
+              int t = V[Y] << 1;
+              writeCarry(X, t, (V[Y]>>7) & 0x1);
               break;
+            }
             default:
               printf("Opcode Error 8XXX, address %x\n", pc-2);
               break;
@@ -301,7 +314,6 @@ int main(int argc, char** argv) {
               } else if (filled) {
                 screen[coordY][coordX] = true;
               }
-              //coordX = (coordX + 1) % 64;
               coordX++;
               if (coordX > 63) { break; }
             }
@@ -311,11 +323,11 @@ int main(int argc, char** argv) {
           break;
         case 0xE:
           if (op2 == 0x9E) {
-            if (keyboard[V[X]]) {
+            if (keyboard[V[X] & 0xF]) {
               pc += 2;
             }
           } else if (op2 == 0xA1) {
-            if (!keyboard[V[X]]) {
+            if (!(keyboard[V[X]] & 0xF)) {
               pc += 2;
             }
           }
@@ -348,23 +360,25 @@ int main(int argc, char** argv) {
               I += V[X];
               break;
             case 0x29:
-              I = V[X] * 5 + 0x50;
+              I = (V[X] & 0xF) * 5;
               break;
             case 0x33:{
-              mem[I] = (int)(V[X]/100);
-              mem[I+1] = (int)((V[X] % 100)/10);
-              mem[I+2] = (int)(V[X] % 10);
+              mem[I] = (int)(V[X]/100) % 10;
+              mem[I+1] = (int)(V[X]/10) % 10;
+              mem[I+2] = (int)(V[X]) % 10;
               break;
             }
             case 0x55:
-              for (char i = 0; i <= (op1 & 0xF); i++) {
+              for (char i = 0; i <= X; i++) {
                 mem[I+i] = V[i];
               }
+              I = (I+1) & 0xFFFF; // what?
               break;
             case 0x65:
-              for (char i = 0; i <= (op1 & 0xF); i++) {
+              for (char i = 0; i <= X; i++) {
                 V[i] = mem[I+i];
               }
+              I = (I+1) & 0xFFFF; // what?
               break;
           }
           break;
