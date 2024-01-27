@@ -11,12 +11,16 @@ by Preston Corless
 #include <string.h>
 #include "raylib.h"
 
-#define SCREEN_SCALE 10
+#define SCREEN_SCALE 20
 #define MEMORY 4096 // 4KB
 #define STACKMEM 1024 // 4 bytes per value, for a stack of 256
-#define CLOCK_SPEED 500 // Hertz
+#define CLOCK_SPEED 800 // Hertz
 #define REFRESH_RATE 60 // Hertz
 #define CYCLES_PER_FRAME (CLOCK_SPEED/REFRESH_RATE)
+#define FF_SPEED 10
+
+Color white = {0xbb, 0xcc, 0xaa, 0xff};
+Color black = {0x33, 0x44, 0x22, 0xff};
 
 unsigned char mem[MEMORY] = {0}; // 4KB of Program Memory
 int pc = 0x200; // Program Counter
@@ -34,6 +38,7 @@ unsigned char delayTimer = 0;
 unsigned char soundTimer = 0;
 
 unsigned char keyboard[16];
+bool fastForward = false;
 
 bool drawFlag = true;
 
@@ -107,16 +112,16 @@ void readKeys() {
   keyboard[0xD] = IsKeyDown(KEY_R);
   keyboard[0xE] = IsKeyDown(KEY_F);
   keyboard[0xF] = IsKeyDown(KEY_V);
+  fastForward = IsKeyDown(KEY_TAB);
 }
 
 void drawScreen() {
   BeginDrawing();
 
   if (drawFlag) {
-    printf("Drawing screen\n");
     for (int i = 0; i < 32; i++) {
       for (int j = 0; j < 64; j++) {
-        Color targetColor = screen[i][j] ? BLACK : WHITE;
+        Color targetColor = screen[i][j] ? black : white;
         DrawRectangle(j * SCREEN_SCALE, i * SCREEN_SCALE, SCREEN_SCALE, SCREEN_SCALE, targetColor);
       }
     }
@@ -144,6 +149,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  srandom(69);
   initChip8();
 
   int fileSize = loadCode(f, mem);
@@ -156,7 +162,7 @@ int main(int argc, char** argv) {
   SetTargetFPS(REFRESH_RATE);
   while (pc < MEMORY && !WindowShouldClose()) {
     readKeys();
-    for (int cycles = 0; cycles < 9 && pc < MEMORY; cycles++) {
+    for (int cycles = 0; cycles < (CYCLES_PER_FRAME * (fastForward ? FF_SPEED : 1)) && pc < MEMORY; cycles++) {
       unsigned char op1 = mem[pc];
       unsigned char op2 = mem[pc+1];
       unsigned short opcode = (op1 << 8) | op2;
@@ -266,25 +272,30 @@ int main(int argc, char** argv) {
           pc = V[0] + (opcode & 0x0FFF);
           break;
         case 0xC:
-          V[X] = rand() & op2;
+          V[X] = random() & op2;
           break;
         case 0xD:
           V[0xF] = 0;
-          int coordX = V[X] % 64;
           int coordY = V[Y] % 32;
           int height = op2 & 0xF;
 
           for (int row = 0; row < height; row++) {
             unsigned char sprRow = mem[I + row];
+            int coordX = V[X] % 64;
             for (int pixel = 0; pixel < 8; pixel++) {
               bool filled = (sprRow >> (7-pixel)) & 1;
-              if (filled && screen[coordY + row][coordX + pixel]) {
-                screen[coordY + row][coordX + pixel] = false;
+              if (filled && screen[coordY][coordX]) {
+                screen[coordY][coordX] = false;
                 V[0xF] = true;
               } else if (filled) {
-                screen[coordY + row][coordX + pixel] = true;
+                screen[coordY][coordX] = true;
               }
+              //coordX = (coordX + 1) % 64;
+              coordX++;
+              if (coordX > 63) { break; }
             }
+            coordY++;
+            if (coordY > 31) { break; }
           }
           drawFlag = true;
           break;
@@ -327,7 +338,7 @@ int main(int argc, char** argv) {
               I += V[X];
               break;
             case 0x29:
-              I = V[X] * 5;
+              I = V[X] * 5 + 0x50;
               break;
             case 0x33:{
               mem[I] = (int)(V[X]/100);
