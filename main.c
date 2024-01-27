@@ -1,15 +1,15 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <string.h>
-#include "raylib.h"
-
 /*
 
 KRONCH: a CHIP-8 emulator
 by Preston Corless
 
 */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
+#include "raylib.h"
 
 #define SCREEN_SCALE 10
 #define PRGMEM 4096 // 4KB
@@ -37,7 +37,7 @@ unsigned char keyboard[16];
 bool drawFlag = true;
 
 void printHelp(char* arg) {
-  printf("Usage:\n  %s [FILE].ch8 [OPTIONS]\nOptions:\n  -d	debug mode\n", arg);
+  printf("Usage:\n  %s [FILE].ch8 [OPTIONS]\n", arg);
 }
 
 int loadCode(FILE* f, char* dest) {
@@ -116,40 +116,36 @@ void clearScreen() {
   drawFlag = true;
 }
 
-void drawSprite(unsigned char x, unsigned char y, unsigned char sprite) {
-//  if (drawFlag) {
-    printf("Yeet\n");
-    for (int row = 0; row < sprite; row++) {
-      for (int pixel = 0; pixel < 8; pixel++) {
-        bool memPX = (ram[I+row] >> pixel) % 2;
-        //bool memPX = (ram[I] & (unsigned char)(1 << pixel)) ? true : false;
-        if (memPX) {
-          printf("Yeet2\n");
-        screen[y+row][x+(7-pixel)] = true;
-        }
+void drawSprite(unsigned char x, unsigned char y, unsigned char height) {
+  for (int row = 0; row < height; row++) {
+    for (int pixel = 0; pixel < 8; pixel++) {
+      bool memPX = (ram[I+row] >> pixel) % 2;
+      if (screen[y+row][x+(7-pixel)] && memPX) {
+        V[0xF] = 1;
       }
+      screen[y+row][x+(7-pixel)] |= memPX;
     }
-  //}
+  }
   drawFlag = true;
 }
 
 void drawScreen() {
   BeginDrawing();
 
-  //if (drawFlag) {
-
-  for (int i = 0; i < 32; i++) {
-    for (int j = 0; j < 64; j++) {
-      Color targetColor = screen[i][j] ? BLACK : WHITE;
-      //Color targetColor = BLACK;
-      DrawRectangle(j * SCREEN_SCALE, i * SCREEN_SCALE, SCREEN_SCALE, SCREEN_SCALE, targetColor);
+  if (drawFlag) {
+    printf("Drawing screen\n");
+    for (int i = 0; i < 32; i++) {
+      for (int j = 0; j < 64; j++) {
+        Color targetColor = screen[i][j] ? BLACK : WHITE;
+        DrawRectangle(j * SCREEN_SCALE, i * SCREEN_SCALE, SCREEN_SCALE, SCREEN_SCALE, targetColor);
+      }
     }
   }
-  //printf("yeet draw\n");
-  //DrawRectangle(5, 5, 6, 7, GREEN);
+  drawFlag = false;
 
-  //}
-  drawFlag = true;
+  if (delayTimer) {
+    delayTimer--;
+  }
 
   EndDrawing();
 }
@@ -182,7 +178,7 @@ int main(int argc, char** argv) {
     unsigned char op1 = prg[pc];
     unsigned char op2 = prg[pc+1];
     unsigned short opcode = (op1 << 8) | op2;
-    char X = op1 & 0x0f;
+    char X = op1 & 0x0F;
     char Y = op2 >> 4;
     pc += 2;
     readKeys();
@@ -190,10 +186,11 @@ int main(int argc, char** argv) {
       case 0x0: // Various instructions
         if (op2 == 0xE0) { // clear screen
           clearScreen();
-        }
-        else if (op2 == 0xEE) { // Return from subroutine (use stack)
+        } else if (op2 == 0xEE) { // Return from subroutine (use stack)
           stackptr--;
           pc = stack[stackptr];
+        } else {
+          printf("Opcode Error 0XXX, address %x\n", pc-2);
         }
         break;
       case 0x1: // Goto (exclude stack)
@@ -248,8 +245,8 @@ int main(int argc, char** argv) {
               V[0xF] = 0;
             }
             V[X] = i & 0xFF;
-          }
             break;
+          }
           case 0x5: // Subtract Operation
             V[0xF] = V[X] >= V[Y];
             V[X] -= V[Y];
@@ -264,7 +261,10 @@ int main(int argc, char** argv) {
             break;
           case 0xE: // Left Bit Shift Operation
             V[0xF] = (V[X] & 0x80) >> 7;
-            V[X] >>= 1;
+            V[X] <<= 1;
+            break;
+          default:
+            printf("Opcode Error 8XXX, address %x\n", pc-2);
             break;
         }
         break;
@@ -305,7 +305,7 @@ int main(int argc, char** argv) {
           case 0x0A:{
             bool isKeyPressed = 0;
             for (int i = 0; i < 16; i++) {
-              if (keyboard[1]) {
+              if (keyboard[i]) {
                 isKeyPressed |= keyboard[i];
                 V[X] = i;
               }
@@ -325,20 +325,21 @@ int main(int argc, char** argv) {
             I += V[X];
             break;
           case 0x29:
-            ram[I] = V[X] * 5;
+            I = V[X] * 5;
             break;
           case 0x33:{
-            ram[I] = (int)(V[X]/100);
-            ram[I+1] = (int)((V[X] % 100)/10);
-            ram[I+2] = (int)(V[X] % 10);
-          }
+              ram[I] = (int)(V[X]/100);
+              ram[I+1] = (int)((V[X] % 100)/10);
+              ram[I+2] = (int)(V[X] % 10);
+              break;
+            }
           case 0x55:
-            for (char i = 0; i < 16; i++) {
+            for (char i = 0; i <= (op1 & 0xF); i++) {
               ram[I+i] = V[i];
             }
             break;
           case 0x65:
-            for (char i = 0; i < 16; i++) {
+            for (char i = 0; i <= (op1 & 0xF); i++) {
               V[i] = ram[I+i];
             }
             break;
