@@ -7,7 +7,7 @@ Requires [Raylib](https://www.raylib.com/).
 
 ## Overview
 
-CHIP-8 is regarded by some as an interpreted programming language. It is meant to serve as an instruction set that is relatively simple to emulate and also develop for. This is my attempt at making an emulator capable of running software written to be used on that architecture.
+CHIP-8 is regarded by some as an interpreted programming language. It is meant to serve as a "fantasy" hardware instruction set. This is my attempt at making an emulator capable of running software written to be used on that architecture.
 
 I created this software mainly as a challenge to myself, since I have long been fascinated by emulators and their innter workings. I feel that I still have much to learn, but I am really glad to have learned what I have learned so far. I hope to eventually apply these principles later on, especially as I learn more about software virtualization and containerization.
 
@@ -43,5 +43,5 @@ The output binary is called "kronch". After compiling, you can install the emula
 
 ## Usage (others)
 
-1. Try running `gcc src/main.c -o kronch -lraylib -lGL -lm -lpthread -ldl -lrt` from the root of this repository and see what it spits out! No guarantees that it will all work.
+1. Try running `gcc src/main.c -o kronch -lraylib -lGL -lm -lpthread -ldl -lrt` from the root of this repository! No guarantees that it will all work on other operating systems.
 
