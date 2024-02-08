@@ -1,7 +1,7 @@
 /*
 
 KRONCH: a CHIP-8 emulator
-by Preston Corless
+by Preston Corless (pgattic)
 
 */
 
@@ -58,7 +58,7 @@ int loadCode(FILE* f, unsigned char* dest) {
     dest[rhead + 0x200] = ch;
     rhead++;
     if (rhead > MEMORY) {
-      fprintf(stderr, "\nERROR: Out of Program Memory.");
+      fprintf(stderr, "\nERROR: Out of Program Memory.\n");
       return -1;
     }
   } while (rhead <= size);

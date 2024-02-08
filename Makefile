@@ -9,5 +9,6 @@ clean:
 	rm kronch
 
 install:
-	mv kronch /usr/local/bin/
+	mkdir "${HOME}/bin" -p
+	mv kronch "${HOME}/bin/"
 
